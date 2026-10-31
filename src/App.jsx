@@ -108,8 +108,11 @@ export default function App() {
         </div>
         {session && (
           <div className="user-nav">
-            <span className="user-badge" title={session.user?.phone || session.user?.email || 'User'}>
-              👤 {session.user?.phone || session.user?.email || 'User'}
+            <span
+              className="user-badge"
+              title={`${session.user?.name || session.user?.full_name || ''} ${session.user?.phone || session.user?.email || ''}`.trim()}
+            >
+              👤 {session.user?.name || session.user?.full_name || session.user?.phone || session.user?.email || 'User'}
             </span>
             <button className="link-btn" onClick={signOut}>
               {t('signOut')}

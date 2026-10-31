@@ -56,6 +56,8 @@ function verifyPhoneToken(token) {
     return {
       id: payload.userId,
       phone: payload.phone,
+      name: payload.name || '',
+      full_name: payload.name || '',
       aud: 'authenticated',
       role: 'authenticated',
     };

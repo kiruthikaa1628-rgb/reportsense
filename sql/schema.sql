@@ -6,11 +6,14 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
+  full_name   text,
   email       text,
   phone       text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+alter table public.profiles add column if not exists full_name text;
 
 create index if not exists profiles_email_idx on public.profiles (email);
 create index if not exists profiles_phone_idx on public.profiles (phone);

@@ -21,6 +21,7 @@ const COUNTRY_CODES = [
 
 export default function Login({ t, onLogin }) {
   const [method, setMethod] = useState('phone'); // 'phone' | 'email'
+  const [name, setName] = useState('');
   const [countryCode, setCountryCode] = useState('+91');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -50,6 +51,12 @@ export default function Login({ t, onLogin }) {
     e.preventDefault();
     setError('');
 
+    const cleanName = name.trim();
+    if (!cleanName) {
+      setError('Please enter your name.');
+      return;
+    }
+
     const fullPhone = getFullPhone();
     if (fullPhone.length < 8) {
       setError('Please enter a valid mobile number.');
@@ -58,7 +65,7 @@ export default function Login({ t, onLogin }) {
 
     setStatus('busy');
     try {
-      const res = await loginWithPhone(fullPhone);
+      const res = await loginWithPhone(fullPhone, cleanName);
       if (res?.session) {
         setPhoneSession(res.session);
         if (onLogin) onLogin(res.session);
@@ -76,6 +83,13 @@ export default function Login({ t, onLogin }) {
   async function handleSendEmailCode(e) {
     if (e) e.preventDefault();
     setError('');
+
+    const cleanName = name.trim();
+    if (!cleanName) {
+      setError('Please enter your name.');
+      return;
+    }
+
     const cleanEmail = email.trim();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setError('Please enter a valid email address.');
@@ -86,7 +100,10 @@ export default function Login({ t, onLogin }) {
     try {
       const { error: sendErr } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
-        options: { emailRedirectTo: window.location.origin },
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: { full_name: cleanName },
+        },
       });
       if (sendErr) throw sendErr;
       setEmailStep('otp');
@@ -167,6 +184,17 @@ export default function Login({ t, onLogin }) {
       {/* --- PHONE TAB: DIRECT SIGN IN, NO OTP --- */}
       {method === 'phone' && (
         <form onSubmit={handlePhoneSubmit}>
+          <label htmlFor="phone-name-input">{t('nameLabel')}</label>
+          <input
+            id="phone-name-input"
+            type="text"
+            autoComplete="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t('namePlaceholder')}
+          />
+
           <label htmlFor="phone-input">{t('phone')}</label>
           <div className="phone-input-group">
             <select
@@ -209,6 +237,17 @@ export default function Login({ t, onLogin }) {
         <>
           {emailStep === 'input' ? (
             <form onSubmit={handleSendEmailCode}>
+              <label htmlFor="email-name-input">{t('nameLabel')}</label>
+              <input
+                id="email-name-input"
+                type="text"
+                autoComplete="name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('namePlaceholder')}
+              />
+
               <label htmlFor="email-input">{t('email')}</label>
               <input
                 id="email-input"

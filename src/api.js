@@ -66,10 +66,10 @@ async function call(path, options = {}) {
   return body;
 }
 
-export const loginWithPhone = (phone) =>
+export const loginWithPhone = (phone, name = '') =>
   call('/api/auth-phone', {
     method: 'POST',
-    body: JSON.stringify({ phone }),
+    body: JSON.stringify({ phone, name }),
   });
 
 export const analyzeReport = (payload) =>
