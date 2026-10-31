@@ -1,9 +1,46 @@
 import { supabase } from './supabase.js';
 
+const PHONE_SESSION_KEY = 'reportsense_phone_session_v1';
+
+export function getStoredPhoneSession() {
+  try {
+    const raw = localStorage.getItem(PHONE_SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (session?.access_token && session?.user) return session;
+  } catch {
+    /* storage error or invalid JSON */
+  }
+  return null;
+}
+
+export function setPhoneSession(session) {
+  try {
+    if (session) {
+      localStorage.setItem(PHONE_SESSION_KEY, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(PHONE_SESSION_KEY);
+    }
+  } catch {
+    /* storage error */
+  }
+}
+
 async function authHeader() {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // 1. Check phone session first
+  const phoneSession = getStoredPhoneSession();
+  if (phoneSession?.access_token) {
+    return { Authorization: `Bearer ${phoneSession.access_token}` };
+  }
+
+  // 2. Otherwise check Supabase email session
+  if (supabase) {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (token) return { Authorization: `Bearer ${token}` };
+  }
+
+  return {};
 }
 
 async function call(path, options = {}) {
@@ -28,6 +65,12 @@ async function call(path, options = {}) {
   }
   return body;
 }
+
+export const loginWithPhone = (phone) =>
+  call('/api/auth-phone', {
+    method: 'POST',
+    body: JSON.stringify({ phone }),
+  });
 
 export const analyzeReport = (payload) =>
   call('/api/analyze', { method: 'POST', body: JSON.stringify(payload) });

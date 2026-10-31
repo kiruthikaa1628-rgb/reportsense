@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
+import { loginWithPhone, setPhoneSession } from '../api.js';
 
 const COUNTRY_CODES = [
   { code: '+91', label: '🇮🇳 +91 (India)' },
@@ -18,122 +19,110 @@ const COUNTRY_CODES = [
   { code: '+94', label: '🇱🇰 +94 (Sri Lanka)' },
 ];
 
-export default function Login({ t }) {
+export default function Login({ t, onLogin }) {
   const [method, setMethod] = useState('phone'); // 'phone' | 'email'
   const [countryCode, setCountryCode] = useState('+91');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [step, setStep] = useState('input'); // 'input' | 'otp'
-  const [otp, setOtp] = useState('');
-  const [status, setStatus] = useState('idle'); // 'idle' | 'sending' | 'verifying'
+  const [emailStep, setEmailStep] = useState('input'); // 'input' | 'otp'
+  const [emailOtp, setEmailOtp] = useState('');
+  const [status, setStatus] = useState('idle'); // 'idle' | 'busy'
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const [timer, setTimer] = useState(0);
+  const [emailTimer, setEmailTimer] = useState(0);
 
-  // Countdown timer for resending OTP
+  // Timer for resending email code
   useEffect(() => {
-    if (timer <= 0) return;
+    if (emailTimer <= 0) return;
     const interval = setInterval(() => {
-      setTimer((prev) => prev - 1);
+      setEmailTimer((prev) => prev - 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [timer]);
+  }, [emailTimer]);
 
-  // Clean and format phone number with country code
   function getFullPhone() {
     let cleanNumber = phone.replace(/[^0-9]/g, '');
-    // If user already typed with leading zero (e.g. 09876543210), strip the leading 0
     cleanNumber = cleanNumber.replace(/^0+/, '');
     return `${countryCode}${cleanNumber}`;
   }
 
-  async function handleSendCode(e) {
-    if (e) e.preventDefault();
+  // --- MOBILE NUMBER SIGN IN (DIRECT, NO OTP) ---
+  async function handlePhoneSubmit(e) {
+    e.preventDefault();
     setError('');
-    setSuccessMsg('');
-    setStatus('sending');
 
+    const fullPhone = getFullPhone();
+    if (fullPhone.length < 8) {
+      setError('Please enter a valid mobile number.');
+      return;
+    }
+
+    setStatus('busy');
     try {
-      if (method === 'phone') {
-        const fullPhone = getFullPhone();
-        if (fullPhone.length < 8) {
-          throw new Error('Please enter a valid mobile number.');
-        }
-
-        const { error: sendErr } = await supabase.auth.signInWithOtp({
-          phone: fullPhone,
-        });
-
-        if (sendErr) throw sendErr;
-
-        setStep('otp');
-        setTimer(30);
-        setSuccessMsg(`${t('codeSentSuccess')} (${fullPhone})`);
+      const res = await loginWithPhone(fullPhone);
+      if (res?.session) {
+        setPhoneSession(res.session);
+        if (onLogin) onLogin(res.session);
       } else {
-        const cleanEmail = email.trim();
-        if (!cleanEmail || !cleanEmail.includes('@')) {
-          throw new Error('Please enter a valid email address.');
-        }
-
-        const { error: sendErr } = await supabase.auth.signInWithOtp({
-          email: cleanEmail,
-          options: { emailRedirectTo: window.location.origin },
-        });
-
-        if (sendErr) throw sendErr;
-
-        setStep('otp');
-        setTimer(30);
-        setSuccessMsg(t('codeSentSuccess'));
+        throw new Error('Unable to complete mobile sign-in. Please try again.');
       }
     } catch (err) {
-      setError(err.message || 'Failed to send verification code. Please check details.');
+      setError(err.message || 'Failed to sign in. Please try again.');
     } finally {
       setStatus('idle');
     }
   }
 
-  async function handleVerifyOtp(e) {
-    e.preventDefault();
-    const cleanOtp = otp.trim().replace(/[^0-9]/g, '');
-    if (!cleanOtp || cleanOtp.length < 4) {
-      setError('Please enter the full verification code.');
+  // --- EMAIL SIGN IN ---
+  async function handleSendEmailCode(e) {
+    if (e) e.preventDefault();
+    setError('');
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setError('Please enter a valid email address.');
       return;
     }
 
-    setError('');
-    setStatus('verifying');
-
+    setStatus('busy');
     try {
-      let res;
-      if (method === 'phone') {
-        const fullPhone = getFullPhone();
-        res = await supabase.auth.verifyOtp({
-          phone: fullPhone,
-          token: cleanOtp,
-          type: 'sms',
-        });
-      } else {
-        res = await supabase.auth.verifyOtp({
-          email: email.trim(),
-          token: cleanOtp,
-          type: 'email',
-        });
-      }
-
-      if (res.error) throw res.error;
-      // On success, onAuthStateChange in App.jsx will automatically detect session!
+      const { error: sendErr } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (sendErr) throw sendErr;
+      setEmailStep('otp');
+      setEmailTimer(30);
     } catch (err) {
-      setError(err.message || 'Invalid or expired verification code. Please try again.');
+      setError(err.message || 'Failed to send email link. Please try again.');
+    } finally {
       setStatus('idle');
     }
   }
 
-  function resetToInput() {
-    setStep('input');
-    setOtp('');
+  async function handleVerifyEmailOtp(e) {
+    e.preventDefault();
+    const cleanCode = emailOtp.trim().replace(/[^0-9]/g, '');
+    if (!cleanCode || cleanCode.length < 4) {
+      setError('Please enter the verification code.');
+      return;
+    }
+
     setError('');
-    setSuccessMsg('');
+    setStatus('busy');
+    try {
+      const res = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: cleanCode,
+        type: 'email',
+      });
+      if (res.error) throw res.error;
+      if (res.data?.session && onLogin) {
+        onLogin(res.data.session);
+      }
+    } catch (err) {
+      setError(err.message || 'Invalid or expired code. Please try again.');
+    } finally {
+      setStatus('idle');
+    }
   }
 
   return (
@@ -142,34 +131,32 @@ export default function Login({ t }) {
       <p className="muted">{t('loginHelp')}</p>
 
       {/* Method tabs */}
-      {step === 'input' && (
-        <div className="login-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={method === 'phone'}
-            className={`login-tab ${method === 'phone' ? 'active' : ''}`}
-            onClick={() => {
-              setMethod('phone');
-              setError('');
-            }}
-          >
-            📱 {t('loginWithPhone')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={method === 'email'}
-            className={`login-tab ${method === 'email' ? 'active' : ''}`}
-            onClick={() => {
-              setMethod('email');
-              setError('');
-            }}
-          >
-            ✉️ {t('loginWithEmail')}
-          </button>
-        </div>
-      )}
+      <div className="login-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={method === 'phone'}
+          className={`login-tab ${method === 'phone' ? 'active' : ''}`}
+          onClick={() => {
+            setMethod('phone');
+            setError('');
+          }}
+        >
+          📱 {t('loginWithPhone')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={method === 'email'}
+          className={`login-tab ${method === 'email' ? 'active' : ''}`}
+          onClick={() => {
+            setMethod('email');
+            setError('');
+          }}
+        >
+          ✉️ {t('loginWithEmail')}
+        </button>
+      </div>
 
       {error && (
         <div className="notice error" role="alert">
@@ -177,46 +164,51 @@ export default function Login({ t }) {
         </div>
       )}
 
-      {successMsg && step === 'otp' && (
-        <div className="notice success" role="status">
-          ✅ {successMsg}
-        </div>
+      {/* --- PHONE TAB: DIRECT SIGN IN, NO OTP --- */}
+      {method === 'phone' && (
+        <form onSubmit={handlePhoneSubmit}>
+          <label htmlFor="phone-input">{t('phone')}</label>
+          <div className="phone-input-group">
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              className="country-select"
+              aria-label="Country Code"
+            >
+              {COUNTRY_CODES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <input
+              id="phone-input"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder={t('phonePlaceholder')}
+              className="phone-field"
+            />
+          </div>
+
+          <p className="muted small" style={{ marginTop: '8px' }}>
+            🔒 {t('phoneHelp')}
+          </p>
+
+          <button className="btn primary" type="submit" disabled={status === 'busy'}>
+            {status === 'busy' ? t('phoneSigningIn') : `✨ ${t('phoneBtn')}`}
+          </button>
+        </form>
       )}
 
-      {/* Step 1: Input details */}
-      {step === 'input' && (
-        <form onSubmit={handleSendCode}>
-          {method === 'phone' ? (
-            <div>
-              <label htmlFor="phone-input">{t('phone')}</label>
-              <div className="phone-input-group">
-                <select
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  className="country-select"
-                  aria-label="Country Code"
-                >
-                  {COUNTRY_CODES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  id="phone-input"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder={t('phonePlaceholder')}
-                  className="phone-field"
-                />
-              </div>
-            </div>
-          ) : (
-            <div>
+      {/* --- EMAIL TAB: LINK / CODE SIGN IN --- */}
+      {method === 'email' && (
+        <>
+          {emailStep === 'input' ? (
+            <form onSubmit={handleSendEmailCode}>
               <label htmlFor="email-input">{t('email')}</label>
               <input
                 id="email-input"
@@ -228,73 +220,75 @@ export default function Login({ t }) {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
               />
-            </div>
-          )}
-
-          <button className="btn primary" type="submit" disabled={status === 'sending'}>
-            {status === 'sending' ? t('sending') : t('sendCode')}
-          </button>
-        </form>
-      )}
-
-      {/* Step 2: Enter OTP Code */}
-      {step === 'otp' && (
-        <form onSubmit={handleVerifyOtp} className="otp-form">
-          <p className="otp-target-hint">
-            {method === 'phone' ? (
-              <>
-                {t('otpHelpPhone')} <strong>{getFullPhone()}</strong>
-              </>
-            ) : (
-              <>
-                {t('otpHelpEmail')} <strong>{email.trim()}</strong>
-              </>
-            )}
-          </p>
-
-          <label htmlFor="otp-input">{t('enterCode')}</label>
-          <input
-            id="otp-input"
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={8}
-            required
-            autoFocus
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            placeholder={t('otpPlaceholder')}
-            className="otp-input"
-          />
-
-          <button
-            className="btn primary"
-            type="submit"
-            disabled={status === 'verifying' || !otp.trim()}
-          >
-            {status === 'verifying' ? t('verifying') : t('verifyCode')}
-          </button>
-
-          <div className="otp-actions">
-            {timer > 0 ? (
-              <span className="muted small">
-                ⏳ {t('resendIn')} {timer}s
-              </span>
-            ) : (
-              <button
-                type="button"
-                className="link-btn small"
-                onClick={() => handleSendCode()}
-                disabled={status === 'sending'}
-              >
-                🔄 {t('resendCode')}
+              <p className="muted small" style={{ marginTop: '8px' }}>
+                ✉️ {t('emailHelp')}
+              </p>
+              <button className="btn primary" type="submit" disabled={status === 'busy'}>
+                {status === 'busy' ? t('sending') : t('sendCode')}
               </button>
-            )}
-            <button type="button" className="link-btn small" onClick={resetToInput}>
-              ✏️ {t('changeContact')}
-            </button>
-          </div>
-        </form>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyEmailOtp} className="otp-form">
+              <div className="notice success" role="status">
+                ✉️ {t('checkInbox')}
+              </div>
+              <p className="otp-target-hint">
+                {t('otpHelpEmail')} <strong>{email.trim()}</strong>
+              </p>
+
+              <label htmlFor="email-otp-input">{t('enterCode')}</label>
+              <input
+                id="email-otp-input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={8}
+                required
+                autoFocus
+                value={emailOtp}
+                onChange={(e) => setEmailOtp(e.target.value)}
+                placeholder={t('otpPlaceholder')}
+                className="otp-input"
+              />
+
+              <button
+                className="btn primary"
+                type="submit"
+                disabled={status === 'busy' || !emailOtp.trim()}
+              >
+                {status === 'busy' ? t('verifying') : t('verifyCode')}
+              </button>
+
+              <div className="otp-actions">
+                {emailTimer > 0 ? (
+                  <span className="muted small">
+                    ⏳ {t('resendIn')} {emailTimer}s
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="link-btn small"
+                    onClick={() => handleSendEmailCode()}
+                    disabled={status === 'busy'}
+                  >
+                    🔄 {t('resendCode')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="link-btn small"
+                  onClick={() => {
+                    setEmailStep('input');
+                    setEmailOtp('');
+                    setError('');
+                  }}
+                >
+                  ✏️ {t('changeContact')}
+                </button>
+              </div>
+            </form>
+          )}
+        </>
       )}
     </section>
   );

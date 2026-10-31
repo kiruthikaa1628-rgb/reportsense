@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase, supabaseConfigured } from './supabase.js';
+import { getStoredPhoneSession, setPhoneSession } from './api.js';
 import { makeT } from './i18n.js';
 import Login from './components/Login.jsx';
 import Analyze from './components/Analyze.jsx';
@@ -31,6 +32,15 @@ export default function App() {
   };
 
   useEffect(() => {
+    // 1. Check if user is logged in via mobile number
+    const storedPhone = getStoredPhoneSession();
+    if (storedPhone) {
+      setSession(storedPhone);
+      setReady(true);
+      return undefined;
+    }
+
+    // 2. Otherwise check Supabase session
     if (!supabaseConfigured) {
       setReady(true);
       return undefined;
@@ -39,9 +49,19 @@ export default function App() {
       setSession(data.session);
       setReady(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (!getStoredPhoneSession()) {
+        setSession(s);
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  const signOut = () => {
+    setPhoneSession(null);
+    if (supabase) supabase.auth.signOut();
+    setSession(null);
+  };
 
   let body;
   if (!supabaseConfigured) {
@@ -49,7 +69,7 @@ export default function App() {
   } else if (!ready) {
     body = <p className="center muted">{t('loading')}</p>;
   } else if (!session) {
-    body = <Login t={t} />;
+    body = <Login t={t} onLogin={(newSession) => setSession(newSession)} />;
   } else {
     body = (
       <>
@@ -88,10 +108,10 @@ export default function App() {
         </div>
         {session && (
           <div className="user-nav">
-            <span className="user-badge" title={session.user.email || session.user.phone}>
-              👤 {session.user.phone || session.user.email}
+            <span className="user-badge" title={session.user?.phone || session.user?.email || 'User'}>
+              👤 {session.user?.phone || session.user?.email || 'User'}
             </span>
-            <button className="link-btn" onClick={() => supabase.auth.signOut()}>
+            <button className="link-btn" onClick={signOut}>
               {t('signOut')}
             </button>
           </div>

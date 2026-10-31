@@ -1,4 +1,5 @@
 import pg from 'pg';
+import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { SCHEMA } from './_schema.js';
 
@@ -34,11 +35,44 @@ export async function ensureSchema() {
   schemaReady = true;
 }
 
+function verifyPhoneToken(token) {
+  if (!token || !token.startsWith('phone_token.')) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [_, dataB64, sig] = parts;
+  const secret = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'reportsense_secret_key';
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(dataB64);
+  const expectedSig = hmac.digest('base64url');
+
+  if (sig !== expectedSig) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(dataB64, 'base64url').toString('utf8'));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+    return {
+      id: payload.userId,
+      phone: payload.phone,
+      aud: 'authenticated',
+      role: 'authenticated',
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Reads the "Authorization: Bearer <token>" header and asks Supabase who the user is.
 export async function getUser(req) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
+
+  // Check if it is a phone session token
+  const phoneUser = verifyPhoneToken(token);
+  if (phoneUser) return phoneUser;
 
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
