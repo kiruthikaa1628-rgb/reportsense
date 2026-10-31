@@ -115,36 +115,69 @@ export default async function handler(req, res) {
     if (image.length > MAX_BASE64_CHARS) return sendError(res, 413, 'Image is too large. Try a smaller photo.');
 
     if (!process.env.GEMINI_API_KEY) return sendError(res, 500, 'Server is missing GEMINI_API_KEY.');
-    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
-    const gemRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': process.env.GEMINI_API_KEY,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: buildPrompt(language) },
-                { inline_data: { mime_type: mimeType, data: image } },
-              ],
-            },
-          ],
-          generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-        }),
-      }
+    // Fallback list of models in case of Google server spikes or high demand
+    const candidateModels = Array.from(
+      new Set(
+        [
+          process.env.GEMINI_MODEL,
+          'gemini-3.5-flash',
+          'gemini-3.5-flash-lite',
+          'gemini-3.6-flash',
+          'gemini-3.8-flash',
+        ].filter(Boolean)
+      )
     );
 
-    if (gemRes.status === 429) {
-      return sendError(res, 429, 'The free AI limit has been reached for now. Please try again in a few minutes.');
+    let gemRes = null;
+    for (const m of candidateModels) {
+      try {
+        const attempt = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': process.env.GEMINI_API_KEY,
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: buildPrompt(language) },
+                    { inline_data: { mime_type: mimeType, data: image } },
+                  ],
+                },
+              ],
+              generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+            }),
+          }
+        );
+
+        if (attempt.ok) {
+          gemRes = attempt;
+          break;
+        }
+
+        const detail = await attempt.text();
+        console.warn(`Gemini model ${m} returned ${attempt.status}:`, detail.slice(0, 200));
+
+        // If 503 (high demand) or 404 (model deprecated), try next model in the list
+        if (attempt.status === 503 || attempt.status === 404) {
+          continue;
+        }
+
+        gemRes = attempt;
+        break;
+      } catch (fetchErr) {
+        console.warn(`Connection error to model ${m}:`, fetchErr.message);
+      }
     }
-    if (!gemRes.ok) {
-      const detail = await gemRes.text();
-      console.error('Gemini error', gemRes.status, detail.slice(0, 500));
+
+    if (!gemRes || !gemRes.ok) {
+      if (gemRes?.status === 429) {
+        return sendError(res, 429, 'The free AI limit has been reached for now. Please try again in a few minutes.');
+      }
       return sendError(res, 502, 'The AI service could not read this report. Please try again.');
     }
 
