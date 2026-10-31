@@ -12,12 +12,27 @@ export default async function handler(req, res) {
 
     await ensureSchema();
     const pool = getPool();
+
+    try {
+      await pool.query(
+        `insert into public.profiles (id, email, phone, updated_at)
+         values ($1, $2, $3, now())
+         on conflict (id) do update set
+           email = coalesce(excluded.email, public.profiles.email),
+           phone = coalesce(excluded.phone, public.profiles.phone),
+           updated_at = now()`,
+        [user.id, user.email || null, user.phone || null]
+      );
+    } catch (profileErr) {
+      console.warn('Profile sync warning:', profileErr.message);
+    }
+
     const id = req.query?.id;
     if (id && !UUID.test(id)) return sendError(res, 400, 'Invalid id.');
 
     if (req.method === 'GET' && !id) {
       const { rows } = await pool.query(
-        `select id, language, summary, urgent, created_at,
+        `select id, language, summary, urgent, report_type, report_type_label, created_at,
                 jsonb_array_length(results) as test_count
            from public.reports
           where user_id = $1
@@ -30,7 +45,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && id) {
       const { rows } = await pool.query(
-        `select id, language, summary, results, urgent, created_at
+        `select id, language, summary, results, urgent, report_type, report_type_label, created_at
            from public.reports where id = $1 and user_id = $2`,
         [id, user.id]
       );

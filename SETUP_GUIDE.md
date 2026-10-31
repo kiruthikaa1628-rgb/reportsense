@@ -25,6 +25,12 @@ You will set up four things: **Supabase** (login + database), **Google Gemini** 
 
 Email sign-in is on by default. Supabase's built-in email sender has a small hourly limit, which is fine for testing. For real users, add your own SMTP provider later under **Authentication → Emails**.
 
+### (Optional) Enable Mobile Number (SMS) sign-in
+1. In Supabase, open **Authentication → Providers → Phone**.
+2. Toggle **Enable Phone Provider** ON.
+3. Choose your SMS provider (Twilio, MessageBird, Vonage, etc.) and enter your credentials.
+4. **For free testing without SMS credits:** Scroll to **Phone Numbers for Testing**, add test numbers (for example: `+919999999999` with OTP `123456`). You can use these immediately to test mobile login with zero SMS fees.
+
 ## Step 3 – Get a free Gemini API key
 
 1. Go to https://aistudio.google.com/app/apikey and sign in with a Google account.

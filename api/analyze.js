@@ -164,11 +164,35 @@ export default async function handler(req, res) {
     }
 
     await ensureSchema();
-    const { rows } = await getPool().query(
-      `insert into public.reports (user_id, language, summary, results, urgent)
-       values ($1, $2, $3, $4::jsonb, $5)
+    const pool = getPool();
+
+    try {
+      await pool.query(
+        `insert into public.profiles (id, email, phone, updated_at)
+         values ($1, $2, $3, now())
+         on conflict (id) do update set
+           email = coalesce(excluded.email, public.profiles.email),
+           phone = coalesce(excluded.phone, public.profiles.phone),
+           updated_at = now()`,
+        [user.id, user.email || null, user.phone || null]
+      );
+    } catch (profileErr) {
+      console.warn('Profile sync warning:', profileErr.message);
+    }
+
+    const { rows } = await pool.query(
+      `insert into public.reports (user_id, language, summary, results, urgent, report_type, report_type_label)
+       values ($1, $2, $3, $4::jsonb, $5, $6, $7)
        returning id, created_at`,
-      [user.id, language, parsed.summary, JSON.stringify(parsed.results), parsed.urgent]
+      [
+        user.id,
+        language,
+        parsed.summary,
+        JSON.stringify(parsed.results),
+        parsed.urgent,
+        parsed.report_type,
+        parsed.report_type_label,
+      ]
     );
 
     return res.status(200).json({

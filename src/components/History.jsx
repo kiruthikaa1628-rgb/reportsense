@@ -2,6 +2,21 @@ import { useEffect, useState } from 'react';
 import { deleteReport, getReport, listReports } from '../api.js';
 import Results from './Results.jsx';
 
+const REPORT_TYPE_ICON = {
+  blood_test: '🩸',
+  urine_test: '🧪',
+  xray: '🦴',
+  mri: '🧠',
+  ct_scan: '🔬',
+  ecg: '❤️',
+  ultrasound: '📡',
+  pathology: '🔭',
+  prescription: '💊',
+  discharge_summary: '🏥',
+  other_lab: '🧫',
+  other_medical: '📋',
+};
+
 export default function History({ t }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');
@@ -72,9 +87,16 @@ export default function History({ t }) {
         {(items || []).map((r) => (
           <li key={r.id} className="card history-item">
             <div>
-              <strong>{new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
-              <span className="muted small"> · {r.test_count} {t('tests')} · {r.language}</span>
-              {r.urgent && <span className="badge high small-badge">⚠️</span>}
+              <div className="history-item-top">
+                <strong>{new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+                {r.report_type_label && (
+                  <span className="history-type-badge">
+                    {REPORT_TYPE_ICON[r.report_type] || '📋'} {r.report_type_label}
+                  </span>
+                )}
+                {r.urgent && <span className="badge high small-badge">⚠️</span>}
+              </div>
+              <span className="muted small">{r.test_count} {t('tests')} · {r.language}</span>
               <p className="clamp">{r.summary}</p>
             </div>
             <div className="row">

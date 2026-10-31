@@ -87,9 +87,14 @@ export default function App() {
           </div>
         </div>
         {session && (
-          <button className="link-btn" onClick={() => supabase.auth.signOut()}>
-            {t('signOut')}
-          </button>
+          <div className="user-nav">
+            <span className="user-badge" title={session.user.email || session.user.phone}>
+              👤 {session.user.phone || session.user.email}
+            </span>
+            <button className="link-btn" onClick={() => supabase.auth.signOut()}>
+              {t('signOut')}
+            </button>
+          </div>
         )}
       </header>
 
