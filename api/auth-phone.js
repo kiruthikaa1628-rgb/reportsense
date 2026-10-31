@@ -103,3 +103,4 @@ export default async function handler(req, res) {
     return sendError(res, 500, 'Failed to sign in with mobile number. Please try again.');
   }
 }
+
