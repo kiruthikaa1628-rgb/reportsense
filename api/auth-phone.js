@@ -114,7 +114,7 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('auth-phone error:', err);
-    return sendError(res, 500, 'Failed to sign in with mobile number. Please try again.');
+    return sendError(res, 500, err.message || 'Failed to sign in with mobile number. Please try again.');
   }
 }
 

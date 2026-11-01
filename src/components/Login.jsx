@@ -267,38 +267,45 @@ export default function Login({ t, onLogin }) {
               </button>
             </form>
           ) : (
-            <form onSubmit={handleVerifyEmailOtp} className="otp-form">
+            <div className="email-sent-card">
               <div className="notice success" role="status">
-                ✉️ {t('checkInbox')}
+                <strong>✉️ {t('checkInbox')}</strong>
+                <p style={{ margin: '8px 0 0', fontSize: '0.95rem' }}>
+                  {t('emailLinkInstructions')} <strong>{email.trim()}</strong>. {t('emailLinkClickToLogin')}
+                </p>
               </div>
-              <p className="otp-target-hint">
-                {t('otpHelpEmail')} <strong>{email.trim()}</strong>
-              </p>
 
-              <label htmlFor="email-otp-input">{t('enterCode')}</label>
-              <input
-                id="email-otp-input"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={8}
-                required
-                autoFocus
-                value={emailOtp}
-                onChange={(e) => setEmailOtp(e.target.value)}
-                placeholder={t('otpPlaceholder')}
-                className="otp-input"
-              />
+              <div className="otp-optional-box" style={{ marginTop: '16px' }}>
+                <details>
+                  <summary className="small muted" style={{ cursor: 'pointer', padding: '6px 0', userSelect: 'none' }}>
+                    🔢 {t('haveCodePrompt')}
+                  </summary>
+                  <form onSubmit={handleVerifyEmailOtp} className="otp-form" style={{ marginTop: '12px' }}>
+                    <label htmlFor="email-otp-input">{t('enterCode')}</label>
+                    <input
+                      id="email-otp-input"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={8}
+                      value={emailOtp}
+                      onChange={(e) => setEmailOtp(e.target.value)}
+                      placeholder={t('otpPlaceholder')}
+                      className="otp-input"
+                    />
 
-              <button
-                className="btn primary"
-                type="submit"
-                disabled={status === 'busy' || !emailOtp.trim()}
-              >
-                {status === 'busy' ? t('verifying') : t('verifyCode')}
-              </button>
+                    <button
+                      className="btn primary"
+                      type="submit"
+                      disabled={status === 'busy' || !emailOtp.trim()}
+                    >
+                      {status === 'busy' ? t('verifying') : t('verifyCode')}
+                    </button>
+                  </form>
+                </details>
+              </div>
 
-              <div className="otp-actions">
+              <div className="otp-actions" style={{ marginTop: '20px' }}>
                 {emailTimer > 0 ? (
                   <span className="muted small">
                     ⏳ {t('resendIn')} {emailTimer}s
@@ -325,7 +332,7 @@ export default function Login({ t, onLogin }) {
                   ✏️ {t('changeContact')}
                 </button>
               </div>
-            </form>
+            </div>
           )}
         </>
       )}
